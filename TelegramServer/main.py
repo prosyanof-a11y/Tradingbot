@@ -132,6 +132,22 @@ async def handle_message(message: dict):
     cmd = parts[0].lower()
     args = parts[1].strip() if len(parts) > 1 else ""
 
+    # Нижние кнопки (Reply keyboard)
+    if text in ("🏠 Меню", "/start", "/menu"):
+        await show_main_menu(chat_id)
+        return
+    if text == "📊 Статус":
+        push_command("/status", "")
+        await send_message("📊 Запрашиваю статус...", chat_id)
+        return
+    if text == "🎯 Стадия":
+        await show_symbol_menu(chat_id, "📍 Выбери инструмент для установки стадии:")
+        return
+    if text == "📈 Отчёт":
+        push_command("/report", "")
+        await send_message("📈 Запрашиваю отчёт...", chat_id)
+        return
+
     if cmd in ("/start", "/menu"):
         await show_main_menu(chat_id)
 
@@ -305,7 +321,20 @@ def back_keyboard():
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
+def persistent_keyboard():
+    """Постоянная нижняя клавиатура — всегда видна в чате."""
+    return {
+        "keyboard": [
+            [{"text": "🏠 Меню"}, {"text": "📊 Статус"}],
+            [{"text": "🎯 Стадия"}, {"text": "📈 Отчёт"}],
+        ],
+        "resize_keyboard": True,
+        "persistent": True,
+    }
+
 async def show_main_menu(chat_id: str):
+    # Сначала показываем постоянную клавиатуру, потом inline-меню
+    await send_message("⌨️ Быстрые кнопки активированы", chat_id, persistent_keyboard())
     await send_message("🏠 *Чёрный Грааль* — главное меню:", chat_id, main_keyboard())
 
 async def show_symbol_menu(chat_id: str, text: str):

@@ -383,12 +383,15 @@ namespace cAlgo.Robots
 
         private Dictionary<string, SymbolState> _states = new Dictionary<string, SymbolState>();
         private Dictionary<string, SwingDetector> _swings = new Dictionary<string, SwingDetector>();
+        private Dictionary<string, SwingDetector> _swings4H = new Dictionary<string, SwingDetector>();
         private Dictionary<string, Bars> _bars1H = new Dictionary<string, Bars>();
         private Dictionary<string, Bars> _bars15M = new Dictionary<string, Bars>();
+        private Dictionary<string, Bars> _bars4H = new Dictionary<string, Bars>();
 
         private TelegramBridge _tg;
         private DateTime _lastPoll = DateTime.MinValue;
         private DateTime _lastDDCheck = DateTime.MinValue;
+        private DateTime _lastSuggestion = DateTime.MinValue;
         private bool _ddWarned = false;
 
         // ── Инициализация ─────────────────────────────────────────────
@@ -412,7 +415,9 @@ namespace cAlgo.Robots
                 {
                     _bars1H[sym] = MarketData.GetBars(TimeFrame.Hour, sym);
                     _bars15M[sym] = MarketData.GetBars(TimeFrame.Minute15, sym);
+                    _bars4H[sym] = MarketData.GetBars(TimeFrame.Hour4, sym);
                     _swings[sym] = new SwingDetector(_bars1H[sym], SwingStrength);
+                    _swings4H[sym] = new SwingDetector(_bars4H[sym], SwingStrength);
                     _states[sym] = new SymbolState { Symbol = sym };
                     Print($"[{sym}] OK — H={_swings[sym].LastHigh:F5} L={_swings[sym].LastLow:F5}");
                 }
@@ -441,6 +446,13 @@ namespace cAlgo.Robots
             {
                 _lastDDCheck = DateTime.UtcNow;
                 CheckDrawdown();
+            }
+
+            // Авто-анализ стадий каждые 4 часа
+            if ((DateTime.UtcNow - _lastSuggestion).TotalHours >= 4)
+            {
+                _lastSuggestion = DateTime.UtcNow;
+                SuggestAllStages();
             }
 
             // Торговля по каждому символу
@@ -582,6 +594,7 @@ namespace cAlgo.Robots
                 st.Grid = grid;
                 Print($"[{st.Symbol}] Сетка: {grid}");
                 _tg.GridRebuilt(st.Symbol, reason);
+                DrawGridOnChart(st);
             }
         }
 
@@ -667,6 +680,107 @@ namespace cAlgo.Robots
         {
             double total = Positions.Sum(p => p.NetProfit);
             _tg.Notify($"📈 ОТЧЁТ\\nБаланс: {Account.Balance:F2}\\nP&L открытых: {total:+0.00;-0.00}$\\nПросадка: {GetDrawdownPct():F1}%");
+        }
+
+        // ── Авто-определение стадий по H4 ────────────────────────────
+
+        private void SuggestAllStages()
+        {
+            foreach (var st in _states.Values)
+            {
+                if (!_swings4H.ContainsKey(st.Symbol)) continue;
+                var swing = _swings4H[st.Symbol];
+                if (swing.LastHigh <= swing.LastLow) continue;
+
+                var sym = Symbols.GetSymbol(st.Symbol);
+                double price = (sym.Bid + sym.Ask) / 2;
+                double range = swing.LastHigh - swing.LastLow;
+                double pct = (price - swing.LastLow) / range * 100.0;
+
+                int s1, s2;
+                string zone;
+                GetStageSuggestion(pct, out s1, out s2, out zone);
+
+                string cur = st.Stage > 0 ? $"текущая: {st.Stage}" : "стадия не задана";
+                string msg = $"📍 *{st.Symbol}* | H4: {pct:F0}% диапазона\\n" +
+                             $"Зона: {zone} | {cur}\\n" +
+                             $"Предлагаю стадию *{s1}* или *{s2}*\\n" +
+                             $"Подтвердить:\\n" +
+                             $"`/stage {st.Symbol} {s1}` или `/stage {st.Symbol} {s2}`";
+                _tg.Notify(msg);
+                Print($"[{st.Symbol}] H4 позиция {pct:F1}% → предложение: стадия {s1} или {s2}");
+            }
+        }
+
+        private void GetStageSuggestion(double pct, out int s1, out int s2, out string zone)
+        {
+            // pct = положение цены в % от диапазона H4 (LastLow=0%, LastHigh=100%)
+            if (pct < 20)
+            {
+                s1 = 4; s2 = 2; zone = "глубокая коррекция (< 20%)";
+            }
+            else if (pct >= 20 && pct < 45)
+            {
+                s1 = 2; s2 = 4; zone = "нижняя зона (20-45%)";
+            }
+            else if (pct >= 45 && pct < 68)
+            {
+                s1 = 2; s2 = 3; zone = "зона 50-61.8% — коррекция/вход";
+            }
+            else if (pct >= 68 && pct < 105)
+            {
+                s1 = 1; s2 = 3; zone = "трендовая зона (68-100%)";
+            }
+            else if (pct >= 105 && pct < 170)
+            {
+                s1 = 3; s2 = 6; zone = "пробой 100%, расширение (105-170%)";
+            }
+            else if (pct >= 170 && pct < 270)
+            {
+                s1 = 4; s2 = 6; zone = "зона 161-261% (170-270%)";
+            }
+            else
+            {
+                s1 = 6; s2 = 4; zone = "выше 261% — финальный импульс";
+            }
+        }
+
+        // ── Рисование сетки на графике ────────────────────────────────
+
+        private void DrawGridOnChart(SymbolState st)
+        {
+            // Рисуем только для символа текущего графика
+            if (st.Symbol != Symbol.Name || st.Grid == null) return;
+
+            var g = st.Grid;
+
+            // Удаляем старые линии сетки
+            Chart.RemoveObject("FG_0");
+            Chart.RemoveObject("FG_50");
+            Chart.RemoveObject("FG_61");
+            Chart.RemoveObject("FG_100");
+            Chart.RemoveObject("FG_123");
+            Chart.RemoveObject("FG_161");
+            Chart.RemoveObject("FG_261");
+
+            // Рисуем уровни
+            Chart.DrawHorizontalLine("FG_0",   g.Level0,   Color.Gray,    1, LineStyle.DotsRare);
+            Chart.DrawHorizontalLine("FG_50",  g.Level50,  Color.Yellow,  1, LineStyle.Dots);
+            Chart.DrawHorizontalLine("FG_61",  g.Level61,  Color.FromHex("#00FF88"), 2, LineStyle.Solid);
+            Chart.DrawHorizontalLine("FG_100", g.Level100, Color.White,   1, LineStyle.Dots);
+            Chart.DrawHorizontalLine("FG_123", g.Level123, Color.Orange,  1, LineStyle.Dots);
+            Chart.DrawHorizontalLine("FG_161", g.Level161, Color.Cyan,    1, LineStyle.Dots);
+            Chart.DrawHorizontalLine("FG_261", g.Level261, Color.FromHex("#4488FF"), 1, LineStyle.DotsRare);
+
+            // Метки уровней
+            var lastBar = Bars.Count - 1;
+            Chart.DrawText("FG_LBL_0",   "0%",     lastBar, g.Level0,   Color.Gray);
+            Chart.DrawText("FG_LBL_50",  "50%",    lastBar, g.Level50,  Color.Yellow);
+            Chart.DrawText("FG_LBL_61",  "61.8% ←ВХОД", lastBar, g.Level61, Color.FromHex("#00FF88"));
+            Chart.DrawText("FG_LBL_100", "100%",   lastBar, g.Level100, Color.White);
+            Chart.DrawText("FG_LBL_123", "123.6%", lastBar, g.Level123, Color.Orange);
+            Chart.DrawText("FG_LBL_161", "161.8%", lastBar, g.Level161, Color.Cyan);
+            Chart.DrawText("FG_LBL_261", "261.8%", lastBar, g.Level261, Color.FromHex("#4488FF"));
         }
 
         protected override void OnStop()
