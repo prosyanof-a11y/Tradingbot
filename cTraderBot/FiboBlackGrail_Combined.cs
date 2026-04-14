@@ -401,11 +401,12 @@ namespace cAlgo.Robots
             Print("=== ЧЁРНЫЙ ГРААЛЬ | FiboAlex.com | Старт ===");
 
             _tg = new TelegramBridge(ServerUrl, BotSecret, this);
-            _tg.OnStage = HandleStage;
-            _tg.OnPause = sym => SetPause(sym, true);
-            _tg.OnResume = sym => SetPause(sym, false);
-            _tg.OnStatus = SendStatus;
-            _tg.OnReport = SendReport;
+            // Все обработчики через BeginInvokeOnMainThread — иначе краш при рисовании на графике
+            _tg.OnStage  = (sym, stage) => BeginInvokeOnMainThread(() => HandleStage(sym, stage));
+            _tg.OnPause  = sym => BeginInvokeOnMainThread(() => SetPause(sym, true));
+            _tg.OnResume = sym => BeginInvokeOnMainThread(() => SetPause(sym, false));
+            _tg.OnStatus = () => BeginInvokeOnMainThread(SendStatus);
+            _tg.OnReport = () => BeginInvokeOnMainThread(SendReport);
 
             foreach (var raw in SymbolsList.Split(','))
             {
