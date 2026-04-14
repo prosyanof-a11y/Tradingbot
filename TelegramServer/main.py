@@ -189,8 +189,13 @@ async def handle_callback(cb: dict):
 
     log.info(f"CALLBACK: {data} chat={chat_id}")
 
+    # ── Открыть меню выбора инструмента
+    if data == "set_stage":
+        await edit_message(chat_id, msg_id,
+            "📍 Выбери инструмент:", symbol_keyboard())
+
     # ── Выбор инструмента для стадии
-    if data.startswith("sym:"):
+    elif data.startswith("sym:"):
         sym = data[4:]
         pending_symbol[chat_id] = sym
         await edit_message(chat_id, msg_id,
@@ -198,7 +203,7 @@ async def handle_callback(cb: dict):
             stage_keyboard(sym))
 
     # ── Выбор стадии
-    elif data.startswith("stage:"):
+    if data.startswith("stage:"):
         _, sym, stage = data.split(":")
         push_command("/stage", f"{sym} {stage}")
         algo = get_algo(int(stage))
