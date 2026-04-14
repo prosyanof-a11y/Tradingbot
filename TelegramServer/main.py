@@ -26,7 +26,8 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 BOT_SECRET       = os.environ.get("BOT_SECRET", "change_me_secret")
 TELEGRAM_API     = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-SYMBOLS = ["XAUUSD", "XAGUSD", "USOil", "NAS100", "EURUSD", "GBPUSD"]
+SYMBOLS = ["XAUUSD", "XAGUSD", "BRENT", "#USSPX500", "EURUSD", "GBPUSD",
+           "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "BITCOIN"]
 
 STAGES = {
     "1": "1️⃣ Тренд",
@@ -374,8 +375,11 @@ def help_text() -> str:
         "Используй кнопки: /menu\n\n"
         "Или текстовые команды:\n"
         "`/stage XAUUSD 1` — установить стадию\n"
-        "`/pause XAUUSD` — пауза\n"
+        "`/pause XAUUSD` — пауза (ALL — все)\n"
         "`/resume XAUUSD` — возобновить\n"
+        "_Инструменты: XAUUSD, XAGUSD, BRENT,_\n"
+        "_#USSPX500, EURUSD, GBPUSD, USDJPY,_\n"
+        "_AUDUSD, USDCAD, USDCHF, NZDUSD, BITCOIN_\n\n"
         "`/status` — статус всех\n"
         "`/report` — отчёт\n\n"
         "*Стадии:*\n"

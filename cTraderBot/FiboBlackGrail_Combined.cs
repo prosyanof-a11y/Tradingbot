@@ -367,7 +367,7 @@ namespace cAlgo.Robots
         [Parameter("Bot Secret", DefaultValue = "BlackGrail2026")]
         public string BotSecret { get; set; }
 
-        [Parameter("Символы (через запятую)", DefaultValue = "XAUUSD,XAGUSD,USOil,NAS100,EURUSD,GBPUSD")]
+        [Parameter("Символы (через запятую)", DefaultValue = "XAUUSD,XAGUSD,BRENT,#USSPX500,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCAD,USDCHF,NZDUSD,BITCOIN")]
         public string SymbolsList { get; set; }
 
         [Parameter("Swing Strength (свечей)", DefaultValue = 3, MinValue = 2, MaxValue = 8)]
@@ -467,6 +467,9 @@ namespace cAlgo.Robots
 
         private void CheckEntry(SymbolState st)
         {
+            // Только одна открытая позиция на инструмент
+            if (st.PositionIds.Count > 0) return;
+
             if ((DateTime.UtcNow - st.LastEntry).TotalMinutes < 5) return;
 
             var sym = Symbols.GetSymbol(st.Symbol);
